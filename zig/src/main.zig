@@ -144,40 +144,37 @@ fn all_same(mark_iter: anytype, run_length: u32) Mark {
 fn winner(g: TicTacToe) Mark {
     // Check for winning rows
     var row_iter = g.rows();
-    for (0..g.side_len) |_| {
+    for (0..g.side_len) |row_idx| {
         const winning_mark = all_same(&row_iter, g.side_len);
         if (winning_mark != .Nil) {
+            std.debug.print("Won on row {d}.\n", .{row_idx});
             return winning_mark;
         }
     }
 
     // Check for winning columns
     var col_iter = g.cols();
-    for (0..g.side_len) |_| {
+    for (0..g.side_len) |col_idx| {
         const winning_mark = all_same(&col_iter, g.side_len);
         if (winning_mark != .Nil) {
+            std.debug.print("Won on col {d}.\n", .{col_idx});
             return winning_mark;
         }
     }
 
     // Check for winning diagonals
     var diag_iter = g.diags();
-    for (0..2) |_| {
+    for (0..2) |diag_idx| {
         const winning_mark = all_same(&diag_iter, g.side_len);
         if (winning_mark != .Nil) {
+            std.debug.print("Won on diagonal {d}.\n", .{diag_idx});
             return winning_mark;
         }
     }
     return .Nil;
 }
 
-pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-    const alloc = std.heap.c_allocator;
-
-    var g = try ttt_new(4, alloc);
-    defer ttt_free(&g, alloc);
+fn gauntlet(g: TicTacToe) void {
     var row_iter = g.rows();
     while (row_iter.next()) |row| {
         std.log.info("got row {}", .{std.json.fmt(row, .{})});
@@ -191,11 +188,26 @@ pub fn main() !void {
         std.log.info("got diags {}", .{std.json.fmt(diag, .{})});
     }
     std.log.info("checking winner: {}", .{std.json.fmt(winner(g), .{})});
+}
+
+pub fn main() !void {
+    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
+    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    const alloc = std.heap.c_allocator;
+
+    var g = try ttt_new(4, alloc);
+    defer ttt_free(&g, alloc);
 
     // Main game loop
-    var current_mark: Mark = .X;
-    while (true) {
-        try g.show();
+    try g.show();
+    var current_mark: Mark = .O;
+    var winning_mark: Mark = .Nil;
+    while (winning_mark == .Nil) {
+        current_mark = switch (current_mark) {
+            .X => .O,
+            .O => .X,
+            .Nil => .Nil,
+        };
         try stdout.print("It's your turn, {}!\n", .{current_mark});
         try stdout_bw.flush();
 
@@ -204,19 +216,12 @@ pub fn main() !void {
         try stdin.streamUntilDelimiter(in_buf_stream.writer(), '\n', 256);
         const move_choice = try std.fmt.charToDigit(in_buf[0], 10);
         g.move(&[1]u8{move_choice}, current_mark);
+        try g.show();
 
-        if winner(g) {
-            
-        }
-
-        current_mark = switch (current_mark) {
-            .X => .O,
-            .O => .X,
-            .Nil => .Nil,
-        };
+        winning_mark = winner(g);
     }
-
-    std.log.info("checking winner: {}", .{std.json.fmt(winner(g), .{})});
+    try stdout.print("You win, {}! Good job!\n", .{winning_mark});
+    try stdout_bw.flush();
 }
 
 test "simple test" {
