@@ -222,11 +222,5 @@ pub fn main() !void {
     }
     try stdout.print("You win, {}! Good job!\n", .{winning_mark});
     try stdout_bw.flush();
-}
-
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+    // I'm bored, fuck Zig, there are 3 hours left, I'm so sleepy..... uwu
 }
