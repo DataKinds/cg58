@@ -69,20 +69,20 @@ instance KnownNat n => Show (TicTacToe n) where
             unlines .
             intersperse rowSeparator .
             fmap (concat . intersperse "\n") .
-            fmap boxJoin $ groupedBoxes        
+            fmap boxJoin $ groupedBoxes
         where
             coshow :: KnownNat n => Either (TicTacToe n) Mark -> [String]
             coshow (Left ttt') = lines $ show ttt'
             coshow (Right mark) = renderMark " " mark
 
             boxJoin :: [[String]] -> [String]
-            boxJoin = foldr1 (zipWith (\x y -> x ++ "|" ++ y)) 
-            
-ticTacToe :: (Integral n1) => Natural -> n1 -> SomeIndexedChild TicTacToe
-ticTacToe depth n = ticTacToeWithContinuation depth n Some
+            boxJoin = foldr1 (zipWith (\x y -> x ++ "|" ++ y))
 
-ticTacToeWithContinuation :: (Integral n1) => Natural -> n1 -> (forall n2. KnownNat n2 => TicTacToe n2 -> r) -> r
-ticTacToeWithContinuation depth n continuation = case someNatVal (fromIntegral n) of
+ticTacToe :: (Integral n1) => Natural -> n1 -> SomeIndexedChild TicTacToe
+ticTacToe depth n = ticTacToeCont depth n Some
+
+ticTacToeCont :: (Integral n1) => Natural -> n1 -> (forall n2. KnownNat n2 => TicTacToe n2 -> r) -> r
+ticTacToeCont depth n continuation = case someNatVal (fromIntegral n) of
     Just (SomeNat (_ :: Proxy nat)) -> continuation (ttt depth)
         where
             ttt 0 = TicTacToe @nat . replicate (fromIntegral $ n*n) . Right $ Nil
@@ -92,29 +92,41 @@ ticTacToeWithContinuation depth n continuation = case someNatVal (fromIntegral n
 
 replace :: Natural -> a -> [a] -> [a]
 replace 0 el' (el:els) = el':els
-replace i el' (el:els) = el:(replace (i - 1) el' els)
+replace i el' (el:els) = el:replace (i - 1) el' els
 replace i el' [] = []
+
+
+update :: Natural -> (a -> a) -> [a] -> [a]
+update 0 f (el:els) = f el:els
+update i f (el:els) = el:update (i - 1) f els
+update i f [] = []
+
+
+updateMaybe :: Natural -> (a -> a) -> [a] -> Maybe [a]
+updateMaybe _ _ [] = Nothing
+updateMaybe 0 f (el:els) = Just $ f el:els
+updateMaybe i f (el:els) = do 
+    rec <- updateMaybe (i - 1) f els
+    pure $ el:rec
+
+(!?) :: [a] -> Natural -> Maybe a
+(!?) [] _ = Nothing
+(!?) (x:xs) 0 = pure x
+(!?) (x:xs) n = xs !? (n - 1)
+
 
 -- Accepts a list of indices to move into recursively, starting from 0 in the top left through sideLength in the bottom right 
 move :: KnownNat n => TicTacToe n -> [Natural] -> Mark -> Maybe (TicTacToe n)
-
-move ttt@(TicTacToe board') = fmap TicTacToe . go ([], board')
-    -- (idx, rest) <- uncons dig
-    -- case (board !? (fromIntegral idx)) of
-    --     Nothing -> Nothing -- Tried to place a mark out of bounds!
-    --     Just box -> case box of
-    --         Left (TicTacToe board') -> do
-    --             rec <- move board' rest mark
-    --             replace idx rec board
-    --         Right Nil -> Just $ replace idx (Right mark) board
-    --         Right _ -> Nothing -- Tried to place a mark over an existing X or O!
-    where
-        go :: ([Either (TicTacToe sideLen) Mark], [Either (TicTacToe sideLen) Mark]) -> [Natural] -> Mark -> Maybe [Either (TicTacToe sideLen) Mark]
-        go (done, ((Right mark):rest)) [] mark' = pure $ (reverse rest) ++ ((Right mark'):done)
-        go (done, ((Right mark):rest)) (0:dig) mark' = Nothing
-        go (done, (Left (TicTacToe board):rest)) [] mark = Nothing
---        go (done, (Left (TicTacToe board):rest)) (0:dig) mark = Just $ (reverse rest) ++ ((Left $ TicTacToe (g)):done)))
-        go (done, (box:rest)) (idx:dig) mark = go (box:done, rest) ((idx - 1):dig) mark
+move ttt@(TicTacToe board) (idx:idxs) mark = do
+    box <- board !? fromIntegral idx
+    case box of
+        Left ttt' -> do
+            rec <- move ttt' idxs mark
+            pure . TicTacToe . replace idx (Left rec) $ board
+        Right mark' -> if null idxs then
+                        pure . TicTacToe . replace idx (Right mark) $ board 
+                       else 
+                        Nothing
 
 winner :: KnownNat n => TicTacToe n -> Mark
 winner (TicTacToe board) = let
@@ -122,13 +134,13 @@ winner (TicTacToe board) = let
         Left ttt -> winner ttt;
         Right mark -> mark
     }
-    row = recurse <$> take 3 board 
+    row = recurse <$> take 3 board
     markset = nub row
     wincon = (length markset == 1) && (head markset /= Nil)
     in if wincon then head markset else Nil
 
 _main :: Int -> IO ()
-_main n = ticTacToeWithContinuation 3 n (\game -> do 
+_main n = ticTacToeCont 3 n (\game -> do
         print game
         print $ winner game
     )
