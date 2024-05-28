@@ -8,6 +8,7 @@ import Data.Proxy (Proxy)
 import Data.Kind (Type)
 import System.Environment
 import Data.List
+import Text.Read (readMaybe)
 
 data Mark = X | O | Nil deriving (Eq)
 data SomeIndexedChild (child :: Nat -> Type) = forall n. KnownNat n => Some (child n)
@@ -118,15 +119,19 @@ updateMaybe i f (el:els) = do
 -- Accepts a list of indices to move into recursively, starting from 0 in the top left through sideLength in the bottom right 
 move :: KnownNat n => TicTacToe n -> [Natural] -> Mark -> Maybe (TicTacToe n)
 move ttt@(TicTacToe board) (idx:idxs) mark = do
-    box <- board !? fromIntegral idx
-    case box of
-        Left ttt' -> do
-            rec <- move ttt' idxs mark
-            pure . TicTacToe . replace idx (Left rec) $ board
-        Right mark' -> if null idxs then
-                        pure . TicTacToe . replace idx (Right mark) $ board 
-                       else 
-                        Nothing
+    successes <- updateMaybe idx go (Just <$> board)
+    board' <- sequence successes
+    pure $ TicTacToe board'
+    where
+        go :: KnownNat n => Maybe (Either (TicTacToe n) Mark) -> Maybe (Either (TicTacToe n) Mark)
+        go Nothing = Nothing
+        go (Just t) = case t of
+            Left ttt' -> do
+                rec <- move ttt' idxs mark
+                pure . Left $ rec
+            Right mark' | null idxs && mark' == Nil -> Just $ Right mark
+                        | otherwise -> Nothing
+    
 
 winner :: KnownNat n => TicTacToe n -> Mark
 winner (TicTacToe board) = let
@@ -139,11 +144,27 @@ winner (TicTacToe board) = let
     wincon = (length markset == 1) && (head markset /= Nil)
     in if wincon then head markset else Nil
 
+
+gameStep :: KnownNat n => TicTacToe n -> IO (TicTacToe n)
+gameStep ttt = do
+    print ttt
+    putStr "Please enter a string of space-delimited moves: "
+    rawMoves <- filter (/= " ") . groupBy (\a b -> a /= ' ' && b /= ' ') <$> (readLn :: IO String)
+    let validMoves :: Maybe [Natural] = mapM readMaybe rawMoves
+    case validMoves of 
+        Nothing -> do
+            putStrLn "Could not parse move! Try again!"
+            gameStep ttt
+        Just moves -> case move ttt moves X of
+            Nothing -> do
+                putStrLn "Invalid move! Try again!"
+                gameStep ttt
+            Just ttt' -> gameStep ttt'
+
 _main :: Int -> IO ()
-_main n = ticTacToeCont 3 n (\game -> do
-        print game
-        print $ winner game
-    )
+_main n = ticTacToeCont (fromIntegral n) 3 (\game -> do
+        gameStep game
+        return ())
 
 main :: IO ()
 main = do
