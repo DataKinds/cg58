@@ -65,7 +65,9 @@ instance KnownNat n => Show (TicTacToe n) where
         bbox = maxBbox boxes
         paddedBoxes = padToBbox bbox <$> boxes
         groupedBoxes = (groupN (sideLength ttt) paddedBoxes) :: [[[String]]]
-        rowSeparator = concat . intersperse "+" . replicate (sideLength ttt) . replicate (fst bbox) $ '-'
+        -- rowSeparator = concat . intersperse "+" . replicate (sideLength ttt) . replicate (1 + fst bbox) $ '-'
+        dashes = repeat '-'
+        rowSeparator = take (1 + fst bbox) dashes ++ "+" ++ take (2 + fst bbox) dashes ++ "+" ++ take (1 + fst bbox) dashes
         in
             unlines .
             intersperse rowSeparator .
@@ -77,7 +79,7 @@ instance KnownNat n => Show (TicTacToe n) where
             coshow (Right mark) = renderMark " " mark
 
             boxJoin :: [[String]] -> [String]
-            boxJoin = foldr1 (zipWith (\x y -> x ++ "|" ++ y))
+            boxJoin = foldr1 (zipWith (\x y -> x ++ " | " ++ y))
 
 ticTacToe :: (Integral n1) => Natural -> n1 -> SomeIndexedChild TicTacToe
 ticTacToe depth n = ticTacToeCont depth n Some
