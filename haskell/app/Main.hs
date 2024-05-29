@@ -9,6 +9,7 @@ import Data.Kind (Type)
 import System.Environment
 import Data.List
 import Text.Read (readMaybe)
+import Data.Functor
 
 data Mark = X | O | Nil deriving (Eq)
 data SomeIndexedChild (child :: Nat -> Type) = forall n. KnownNat n => Some (child n)
@@ -65,7 +66,6 @@ instance KnownNat n => Show (TicTacToe n) where
         bbox = maxBbox boxes
         paddedBoxes = padToBbox bbox <$> boxes
         groupedBoxes = (groupN (sideLength ttt) paddedBoxes) :: [[[String]]]
-        -- rowSeparator = concat . intersperse "+" . replicate (sideLength ttt) . replicate (1 + fst bbox) $ '-'
         dashes = repeat '-'
         rowSeparator = take (1 + fst bbox) dashes ++ "+" ++ take (2 + fst bbox) dashes ++ "+" ++ take (1 + fst bbox) dashes
         in
@@ -147,26 +147,32 @@ winner (TicTacToe board) = let
     in if wincon then head markset else Nil
 
 
-gameStep :: KnownNat n => TicTacToe n -> IO (TicTacToe n)
-gameStep ttt = do
-    print ttt
+gameStep :: KnownNat n => TicTacToe n -> Mark -> IO (TicTacToe n)
+gameStep ttt mark = do
+    putStrLn $ "It's your turn, " ++ show mark
     putStr "Please enter a string of space-delimited moves: "
-    rawMoves <- filter (/= " ") . groupBy (\a b -> a /= ' ' && b /= ' ') <$> (readLn :: IO String)
+    rawMoves <- words <$> getLine
     let validMoves :: Maybe [Natural] = mapM readMaybe rawMoves
+    let mark' = \case { X -> O; O -> X; Nil -> Nil } $ mark
     case validMoves of 
         Nothing -> do
             putStrLn "Could not parse move! Try again!"
-            gameStep ttt
-        Just moves -> case move ttt moves X of
+            gameStep ttt mark
+        Just moves -> case move ttt moves mark of
             Nothing -> do
                 putStrLn "Invalid move! Try again!"
-                gameStep ttt
-            Just ttt' -> gameStep ttt'
+                gameStep ttt mark
+            Just ttt' -> do
+                print ttt'
+                gameStep ttt' mark'
+
+gameLoop :: KnownNat n => TicTacToe n -> IO (TicTacToe n)
+gameLoop ttt = do
+    print ttt
+    gameStep ttt X
 
 _main :: Int -> IO ()
-_main n = ticTacToeCont (fromIntegral n) 3 (\game -> do
-        gameStep game
-        return ())
+_main n = ticTacToeCont (fromIntegral n) 3 (void . gameLoop)
 
 main :: IO ()
 main = do
